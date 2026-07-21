@@ -1,6 +1,6 @@
 # Shop CLI
 
-Personal shopping CLI for the Shop catalog: search millions of stores, look up products, sign in to your Shop account, build and complete UCP checkouts, and search your orders for tracking, returns, and reorders.
+Personal shopping CLI for the Shop catalog: search millions of stores, find merchant retail locations and nearby pickup inventory, look up products, sign in to your Shop account, build and complete UCP checkouts, and search your orders for tracking, returns, and reorders.
 
 It talks to the Shopify Global Catalog over MCP and to Shop's auth, checkout, and orders APIs. Tokens are stored in your OS secret store via `keytar`.
 
@@ -30,6 +30,7 @@ Requires Node.js >= 20.
 shop --help
 shop auth status
 shop search "trail running shoes" --limit 10
+shop locations 21852813 50661914640743 --near-country US --near-city "New York" --max-distance 25 --distance-unit miles
 shop catalog lookup gid://shopify/ProductVariant/50362300006715
 shop orders search --type recent
 ```
@@ -37,6 +38,7 @@ shop orders search --type recent
 ## Commands
 
 - `shop search` — search the catalog by text, similar items (`--like-id`), or image (`--image`).
+- `shop locations <shop-id> <variant-id>` — find BOPIS pickup locations with point-in-time inventory for one exact variant near an explicitly supplied city or postal code (Shop sign-in required for API identity; account location is never used).
 - `shop catalog lookup` / `shop catalog get-product` — look up IDs you already hold and fetch full product detail.
 - `shop auth` — sign in (`login`, or the non-blocking `device-code` + `poll`), check `status`, read the remaining delegated spending `budget`, or `logout`.
 - `shop checkout` — `create`, `update`, and `complete` a UCP checkout on the merchant domain (`complete` requires `--confirm`).

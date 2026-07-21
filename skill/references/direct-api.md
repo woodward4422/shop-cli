@@ -1,4 +1,4 @@
-# Direct Auth, Checkout, And Orders API
+# Direct BOPIS Locations, Auth, Checkout, And Orders API
 
 Use this reference when the CLI cannot be installed. Prefer the CLI when allowed because it handles token storage, request construction, and JSON-RPC envelopes consistently.
 
@@ -12,6 +12,52 @@ Use the OS secret store with service `shop-agent` and accounts:
 - `country`
 
 Keep checkout JWTs, buyer IP, and UCP-returned payment tokens in memory only.
+
+## BOPIS Locations
+
+Exact-variant pickup lookup requires a Shop OAuth access token from the device authorization flow below. The token identifies the API caller for normal rate limiting; it is not used to derive the pickup search location. Also send the ordinary CLI `User-Agent`; do not send `X-User-Agent` or spoof a Shop app version:
+
+```http
+POST https://server.shop.app/graphql
+Authorization: Bearer <shop_access_token>
+User-Agent: shop-cli/<version>
+Accept: application/json
+Content-Type: application/json
+```
+
+Use the numeric merchant Shop ID and exact product variant ID from catalog output. Pass the numeric Shop ID as `brokerId`; pass the variant as a full `gid://shopify/ProductVariant/<id>`.
+
+```json
+{
+  "operationName": "ShopCliLocations",
+  "query": "query ShopCliLocations($brokerId: ID!, $variantId: ShopifyProductVariantGID!, $first: Int!, $after: String, $mailingAddress: MailingAddressInput!, $pickupAddress: MailingAddressInput, $pickupCoordinate: CoordinateInput, $maxDistance: DistanceInput) { locationSpecificStorefrontProductVariant(brokerId: $brokerId, variantId: $variantId, mailingAddress: $mailingAddress, pickupAddress: $pickupAddress, pickupCoordinate: $pickupCoordinate) { variantId possiblePickupLocationsV2(first: $first, after: $after, maxDistance: $maxDistance, available: true) { totalCount nodes { isAvailable quantityAvailable distance { value unit } location { name pickupEtaTranslated address { address1 city zoneCode country postalCode } } } pageInfo { startCursor endCursor hasNextPage } } } }",
+  "variables": {
+    "brokerId": "21852813",
+    "variantId": "gid://shopify/ProductVariant/50661914640743",
+    "first": 15,
+    "mailingAddress": {
+      "country": "US",
+      "city": "New York"
+    },
+    "pickupAddress": {
+      "country": "US",
+      "city": "New York"
+    },
+    "maxDistance": {
+      "value": 25,
+      "unit": "MILES"
+    }
+  }
+}
+```
+
+Always send an explicit ISO alpha-2 country plus city or postal code as `mailingAddress`, and send the same object as `pickupAddress`. Authentication does not replace these inputs. This prevents account, saved-address, and IP fallback. If the buyer explicitly authorizes precise coordinates, keep the coarse `mailingAddress`, send `pickupCoordinate`, and omit `pickupAddress`; GraphQL rejects both pickup inputs together. `maxDistance` uses `MILES` or `KILOMETERS`. Use `pageInfo.endCursor` as `after` only when `hasNextPage` is true.
+
+Parse a country plus city or postal code already present in the buyer’s request. If it is missing, ask for that coarse location and wait. Do not infer it from the buyer’s account, a saved address, IP geolocation, or another default.
+
+Use `pickupCoordinate` only when the buyer explicitly authorizes precise location use. Never persist the buyer’s location. Returned location addresses are public merchant data.
+
+`available: true` returns only pickup-enabled locations where the exact variant has point-in-time inventory. It does not reserve inventory. The current UCP checkout is the final source of selectable pickup destinations; never complete or promise BOPIS from this PDP response alone.
 
 ## Device Authorization
 
@@ -227,6 +273,31 @@ Use `update_checkout` with the checkout ID from create and only the fields that 
   }
 }
 ```
+
+For BOPIS, first inspect the current checkout’s `fulfillment.methods` and find `type: "pickup"`. Present its public `destinations` and let the buyer choose when more than one meaningful option exists. Send the selected UCP destination ID back with the checkout’s real line-item IDs:
+
+```json
+{
+  "line_items": [
+    {
+      "id": "<checkout_line_item_id>",
+      "item": {"id": "gid://shopify/ProductVariant/<variant_id>"},
+      "quantity": 1
+    }
+  ],
+  "fulfillment": {
+    "methods": [
+      {
+        "type": "pickup",
+        "line_item_ids": ["<checkout_line_item_id>"],
+        "selected_destination_id": "<pickup_destination_id>"
+      }
+    ]
+  }
+}
+```
+
+Use the destination ID returned by UCP, never the Shop GraphQL location ID. If pickup is not offered by the current checkout, or the selected destination disappears after update, do not claim BOPIS is available and do not silently substitute shipping. Confirm the exact item, variant, quantity, pickup store, price, total, and warnings before completion.
 
 ## Payment Budget (Delegated Spending)
 
