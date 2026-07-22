@@ -57,7 +57,9 @@ Parse a country plus city or postal code already present in the buyer’s reques
 
 Use `pickupCoordinate` only when the buyer explicitly authorizes precise location use. Never persist the buyer’s location. Returned location addresses are public merchant data.
 
-`available: true` returns only pickup-enabled locations where the exact variant has point-in-time inventory. It does not reserve inventory. The current UCP checkout is the final source of selectable pickup destinations; never complete or promise BOPIS from this PDP response alone.
+`available: true` returns only pickup-enabled locations where the exact variant has point-in-time inventory. It does not reserve inventory.
+
+After discovery, retrieve the selected product through the Global Catalog `get_product` tool and use the exact selected variant’s returned `checkout_url`. Compact catalog search and lookup responses omit checkout URLs. Never reconstruct a checkout URL from the merchant domain or variant ID; catalog-provided URLs can contain required opaque parameters. The link adds the exact variant to normal merchant checkout but does not preselect pickup or a store, so tell the buyer to choose both there. If `checkout_url` is absent, return the catalog-provided product URL instead. Never fabricate a URL or claim that pickup is reserved or completed.
 
 ## Device Authorization
 
@@ -118,7 +120,7 @@ resource=https://{shop_domain}/
 client_id=5c733ab2-1903-400a-891e-7ba20c09e2a3
 ```
 
-If the merchant endpoint returns auth/permission errors, hand off with the variant `checkout_url`, product URL, or seller URL instead of retrying the same agent checkout.
+If the merchant endpoint returns auth/permission errors, hand off with the catalog-provided variant `checkout_url`, or the product URL when it is absent, instead of retrying the same agent checkout. Never construct either URL.
 
 Use the returned JWT only in memory:
 
@@ -274,30 +276,7 @@ Use `update_checkout` with the checkout ID from create and only the fields that 
 }
 ```
 
-For BOPIS, first inspect the current checkout’s `fulfillment.methods` and find `type: "pickup"`. Present its public `destinations` and let the buyer choose when more than one meaningful option exists. Send the selected UCP destination ID back with the checkout’s real line-item IDs:
-
-```json
-{
-  "line_items": [
-    {
-      "id": "<checkout_line_item_id>",
-      "item": {"id": "gid://shopify/ProductVariant/<variant_id>"},
-      "quantity": 1
-    }
-  ],
-  "fulfillment": {
-    "methods": [
-      {
-        "type": "pickup",
-        "line_item_ids": ["<checkout_line_item_id>"],
-        "selected_destination_id": "<pickup_destination_id>"
-      }
-    ]
-  }
-}
-```
-
-Use the destination ID returned by UCP, never the Shop GraphQL location ID. If pickup is not offered by the current checkout, or the selected destination disappears after update, do not claim BOPIS is available and do not silently substitute shipping. Confirm the exact item, variant, quantity, pickup store, price, total, and warnings before completion.
+Do not use `update_checkout` to select BOPIS. The current UCP checkout surface used by this CLI does not expose pickup as a supported fulfillment method. Use the exact-variant locations query for point-in-time discovery, then provide the selected variant’s catalog-returned `checkout_url`. The buyer must select pickup and the store during normal checkout. If that URL is unavailable, provide the catalog-returned product URL instead.
 
 ## Payment Budget (Delegated Spending)
 

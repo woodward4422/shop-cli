@@ -108,7 +108,8 @@ describe('renderLocationsResult', () => {
     expect(output).toContain('164 Fifth Ave, New York, NY 10010, United States')
     expect(output).toContain('12 total')
     expect(output).toContain('--cursor NEXT_CURSOR')
-    expect(output).toContain('checkout response is the final source of pickup availability')
+    expect(output).toContain('Inventory is point-in-time and not reserved')
+    expect(output).toContain('buyer selects pickup and the store during checkout')
     expect(output).not.toContain('50661914640743')
   })
 
@@ -345,7 +346,7 @@ describe('renderCatalogResult', () => {
     expect(noUrl).not.toContain('https://kozmoshoes.com')
   })
 
-  it('shows the UCP checkout link only for get_product, as-is with utm', () => {
+  it('shows the catalog checkout link only for get_product, with utm', () => {
     const detail = renderCatalogResult('get_product', {
       result: { structuredContent: { product: searchResponse.result.structuredContent.products[0] } },
     })

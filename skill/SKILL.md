@@ -30,7 +30,7 @@ Every shopping conversation follows this order. Each step links to its rules bel
 1. **Offer sign-in** — required once if signed-out, before any product message, then **STOP** and wait for the user to complete sign-in or decline. → *Sign in*
 2. **Search** the catalog with `shop search`. → *Searching*
 3. **Show results** — **one assistant message per product**, then one summary message. → *Showing products*
-4. **Find BOPIS locations** when the user asks whether an exact item is available for local pickup. → *BOPIS locations and checkout*
+4. **Find BOPIS locations** and hand off with the exact variant’s checkout link when the user asks about local pickup. → *BOPIS locations and checkout handoff*
 5. **Offer visualization** when the item is visual. → *Visualization*
 6. **Checkout** on the merchant domain, only with clear purchase intent. → *Checkout*
 7. **Orders** — tracking, returns, reorder (needs sign-in). → *Orders*
@@ -80,7 +80,7 @@ locations <shop-id> <variant-id>
 shop locations 21852813 50661914640743 --near-country US --near-city "New York" --max-distance 25 --distance-unit miles
 ```
 
-Use the exact variant ID and merchant Shop ID from catalog output. This lookup requires Shop sign-in to identify the caller to the API, but it never reads an account or saved address. It returns only pickup-enabled locations where that variant is currently available, including point-in-time quantity and pickup timing. It does not reserve inventory; the current UCP checkout is the final source of selectable pickup destinations.
+Use the exact variant ID and merchant Shop ID from catalog output. This lookup requires Shop sign-in to identify the caller to the API, but it never reads an account or saved address. It returns only pickup-enabled locations where that variant is currently available, including point-in-time quantity and pickup timing. It does not reserve inventory. After discovery, use the exact variant’s catalog-provided checkout link; pickup and the store are not preselected, so the buyer chooses both during checkout.
 
 ### Checkout
 ```bash
@@ -138,42 +138,18 @@ Manual token exchange, only when the CLI cannot be installed: [catalog-mcp.md](r
 - `shop search --like-id <id>` — pass a product (`gid://shopify/p/...`) or variant (`gid://shopify/ProductVariant/...`) reference; both return similar items.
 - `shop search --image ./photo.jpg` — the CLI base64-encodes it for you. Formats: jpeg, png, webp, avif, heic; max ~3 MB on disk (4 MB base64). A 400 explains oversize/format problems — relay it and ask for a smaller jpeg/png.
 
-## BOPIS locations and checkout
+## BOPIS locations and checkout handoff
 Use this workflow for requests such as “Does Alo Yoga have size medium black yoga pants in stock near me?”:
 
 1. Parse the merchant, product, variant attributes, and any coarse location already present in the buyer’s request.
 2. Search the catalog using merchant/product terms and explicit attribute filters such as `--color Black --size M`. Verify the selected result is the exact requested variant; keep merchant and variant IDs internal.
-3. If country plus city or postal code is missing, ask the buyer for it and wait. Never use their account, saved address, IP geolocation, or another implicit default.
-4. Confirm `shop auth status` is authenticated. If signed out, start device authorization and wait for the buyer to finish; authentication identifies the API caller only and does not supply proximity.
-5. Run `shop locations <shop-id> <variant-id>` with that coarse location and any requested radius. Use precise coordinates only after explicit permission, and still supply the coarse country plus city or postal code.
-6. Present the public store name, address, distance, pickup timing, and available quantity. Explain that inventory is point-in-time and is not reserved.
-7. If the buyer wants to purchase for pickup, create a UCP checkout for the exact variant and inspect the returned `fulfillment.methods`. Product-detail pickup availability is discovery evidence; the current checkout is the final source of selectable pickup destinations.
-8. Find the method with `type: "pickup"` and present its `destinations`. Match by public store name/address, not by the Shop GraphQL location ID. Do not silently choose among meaningful destinations unless the buyer already named a store or preference.
-9. Update the checkout with the selected UCP destination ID and the checkout’s real line-item IDs:
-
-```json
-{
-  "line_items": [
-    {
-      "id": "<checkout_line_item_id>",
-      "item": {"id": "<variant_id>"},
-      "quantity": 1
-    }
-  ],
-  "fulfillment": {
-    "methods": [
-      {
-        "type": "pickup",
-        "line_item_ids": ["<checkout_line_item_id>"],
-        "selected_destination_id": "<pickup_destination_id>"
-      }
-    ]
-  }
-}
-```
-
-10. Inspect the updated checkout. If the pickup destination disappeared, changed, or became unavailable, stop and offer the current alternatives; never substitute shipping without permission.
-11. Before completion, confirm the exact item and variant, quantity, pickup store, price, total, and every checkout warning with the buyer. Then follow the normal `checkout complete --confirm` rules.
+3. Retrieve the selected product with `shop catalog get-product <product-id>` and the same `--select` filters when needed. Compact search and lookup output omit checkout links; keep the exact selected variant’s `Checkout:` URL from `get-product`. Use the CLI-returned URL verbatim and never reconstruct one from a merchant domain or variant ID.
+4. If country plus city or postal code is missing, ask the buyer for it and wait. Never use their account, saved address, IP geolocation, or another implicit default.
+5. Confirm `shop auth status` is authenticated. If signed out, start device authorization and wait for the buyer to finish; authentication identifies the API caller only and does not supply proximity.
+6. Run `shop locations <shop-id> <variant-id>` with that coarse location and any requested radius. Use precise coordinates only after explicit permission, and still supply the coarse country plus city or postal code.
+7. Present the public store name, address, distance, pickup timing, and available quantity. Explain that inventory is point-in-time and is not reserved.
+8. If pickup inventory is available and the buyer wants to purchase, share the exact variant’s `Checkout:` URL as a checkout handoff. State clearly that the link adds the exact variant but does not preselect pickup or a store; the buyer must choose pickup and the desired store during normal merchant checkout.
+9. If the selected variant has no catalog-provided checkout URL, share the catalog-provided product URL instead and give the same pickup-selection instructions. Never fabricate either URL, create a UCP checkout for BOPIS, claim that pickup is reserved, or claim that the CLI completed a pickup purchase.
 
 Use `--near-latitude` and `--near-longitude` only when the buyer explicitly authorizes precise location use. Never persist the buyer’s location. Returned location addresses are public merchant data.
 
@@ -214,7 +190,7 @@ When the item is visual (clothing, shoes, accessories, furniture, decor, art) **
 - State that visualizations are approximate and for inspiration only.
 
 ## Checkout
-- Complete only via the agent flow on the merchant domain. **Never** fall back to browser checkout to bypass an agent-flow error.
+- Complete purchases through the agent flow when UCP supports the requested fulfillment. **Never** fall back to browser checkout to bypass an agent-flow error. BOPIS uses the explicit handoff described above: provide a catalog-returned checkout or product URL and let the buyer select pickup and the store in normal checkout.
 - Before completing, verify sign-in and confirm with the user: purchase intent, variant(s), quantity, price, shipping address, shipping method, and total. `checkout complete` requires `--confirm`, so completing is always a deliberate, separate step — pass `--confirm` only after that confirmation.
 
 **Reading the `checkout create` / `update` response:**
@@ -222,7 +198,7 @@ When the item is visual (clothing, shoes, accessories, furniture, decor, art) **
 - If the buyer's saved shipping details are missing, collect them and pass via `checkout create`/`update`.
 - Pass `--country <ISO2>` on `checkout create` to localize presentment currency; without it the merchant may present a foreign currency. It does not override the saved address.
 - **Warnings:** display every `messages[]` entry with type `warning` (e.g. `final_sale`, `prop65`, `age_restricted`) before completing. Show `presentation: "disclosure"` warnings verbatim — never omit or summarize them. Never complete a purchase without surfacing these.
-- **Pickup:** use only pickup destinations returned by the current checkout. Select one through `checkout update` using its UCP `selected_destination_id` and the checkout’s actual `line_item_ids`; never send the Shop GraphQL location ID. Confirm the selected pickup store before completion.
+- **Pickup:** current UCP checkout does not support selecting a pickup destination through this CLI. Do not create, update, or complete a UCP checkout for BOPIS. Use `shop locations` for point-in-time inventory, then hand off with the selected variant’s catalog-provided checkout link (or product URL fallback); the buyer selects pickup and the store during checkout.
 
 Then take one of two payment paths:
 

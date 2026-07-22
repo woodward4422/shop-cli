@@ -48,7 +48,7 @@ export function renderLocationsResult(json: unknown): string {
   return [
     locations.join('\n\n---\n\n'),
     pagination,
-    '_Inventory is point-in-time. The checkout response is the final source of pickup availability._',
+    "_Inventory is point-in-time and not reserved. Use the catalog's exact-variant checkout link when available; the buyer selects pickup and the store during checkout._",
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -216,8 +216,8 @@ function renderVariants(variants: JsonObject[], productTitle: string, includeChe
     if (availability) line = line ? `${line} — ${availability}` : availability
     if (line) lines.push(line)
 
-    // Show UCP's checkout link as-is, with UTM appended. Never recreate it.
-    // Only rendered for get_product; search/lookup omit it to stay compact.
+    // Show the catalog-provided checkout link with only UTM attribution appended.
+    // Never reconstruct it. Only get_product renders it; search/lookup stay compact.
     if (!includeCheckout) continue
     const checkoutUrl = asString(variant.checkout_url)
     if (checkoutUrl) lines.push(`Checkout: ${withUtm(checkoutUrl)}`)

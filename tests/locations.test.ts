@@ -266,7 +266,10 @@ describe('locations', () => {
     expect(stdout.write).toHaveBeenCalledWith(expect.stringContaining('Alo Flatiron — 2.4 mi'))
     expect(stdout.write).toHaveBeenCalledWith(expect.stringContaining('Pickup stock: 3 items'))
     expect(stdout.write).toHaveBeenCalledWith(
-      expect.stringContaining('checkout response is the final source of pickup availability'),
+      expect.stringContaining('Inventory is point-in-time and not reserved'),
+    )
+    expect(stdout.write).toHaveBeenCalledWith(
+      expect.stringContaining('buyer selects pickup and the store during checkout'),
     )
     expect(stdout.write).not.toHaveBeenCalledWith(expect.stringContaining('50661914640743'))
   })

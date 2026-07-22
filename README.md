@@ -38,12 +38,14 @@ shop orders search --type recent
 ## Commands
 
 - `shop search` — search the catalog by text, similar items (`--like-id`), or image (`--image`).
-- `shop locations <shop-id> <variant-id>` — find BOPIS pickup locations with point-in-time inventory for one exact variant near an explicitly supplied city or postal code (Shop sign-in required for API identity; account location is never used).
-- `shop catalog lookup` / `shop catalog get-product` — look up IDs you already hold and fetch full product detail.
+- `shop locations <shop-id> <variant-id>` — find BOPIS pickup locations with point-in-time inventory for one exact variant near an explicitly supplied city or postal code (Shop sign-in required for API identity; account location is never used). Inventory is not reserved.
+- `shop catalog lookup` / `shop catalog get-product` — look up IDs you already hold and fetch full product detail. `get-product` shows catalog-provided exact-variant checkout links when available.
 - `shop auth` — sign in (`login`, or the non-blocking `device-code` + `poll`), check `status`, read the remaining delegated spending `budget`, or `logout`.
 - `shop checkout` — `create`, `update`, and `complete` a UCP checkout on the merchant domain (`complete` requires `--confirm`).
 - `shop orders search` — search recent orders, tracking, order info, returns, and reorder candidates.
 - `shop config` — persist CLI preferences such as a default country.
+
+For BOPIS, first verify nearby exact-variant inventory with `shop locations`, then hand the buyer the exact variant’s catalog-provided checkout link from `shop catalog get-product`. The link does not preselect pickup or a store; the buyer chooses both during normal merchant checkout. If the catalog provides no checkout link, use its product URL instead. Never reconstruct checkout URLs.
 
 Run `shop <command> --help` for the flags on any command, and see the [Shop skill](https://shop.app/SKILL.md) for the full reference and shopping workflow.
 
